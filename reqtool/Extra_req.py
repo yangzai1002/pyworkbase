@@ -6,7 +6,7 @@ from PyQt5 import QtCore, QtGui
 from PyQt5.QtCore import QDir,pyqtSignal,pyqtSlot,QObject,QThread
 from WordApplication import *
 from ExcelApplication import *
-
+import xlwt
 class ReqExtraWidget(QWidget):
 
     def __init__(self, parent=None):
@@ -133,8 +133,8 @@ class extraReq(QThread):
         file = open(self.tempTxtPath, 'r+', encoding='utf-8')
         #创建一个excel表格
         os.chdir(os.path.dirname(self.reqpath))
-        excel = myExcel()
-        wb, wt = excel.AddBook()
+        book = xlwt.Workbook(encoding="utf-8", style_compression=0)
+        wt=book.add_sheet('VAT', cell_overwrite_ok=True)
         #初始化查找参数
         #1 需求标签号
         key = '[' + self.reqkey  # C4D-I-SyRS
@@ -204,10 +204,10 @@ class extraReq(QThread):
                     req_num = req_num + 1
                     sheet_cloumn = sheet_cloumn + 1
 
-            excel.unionFormat(wt, "A1:C1000")
+            #excel.unionFormat(wt, "A1:C1000")
             time.sleep(5)
             #保存excel输出文档
-            wb.SaveAs(self.outpath)
+            wt.SaveAs(self.outpath)
             self.sendlog("Congratulation,Complete!")
             self.sendlog("文件保存至:" + self.outpath)
             errorStr = "The number of requirement is " + str(req_num)
