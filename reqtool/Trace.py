@@ -11,7 +11,7 @@ class TraceWidget(QWidget):
         self.le1.setText("")
 
         self.le2 = QLineEdit()
-        self.le2.setText("ITCS_RBC_L-SDMS-SwRTC")
+        self.le2.setText("TIS-KA_LPS-SwITC")
 
         self.textEdit1 = QTextEdit(self)
 
@@ -76,10 +76,10 @@ class TraceWidget(QWidget):
     def startRunCaseTrace(self):
         casetrace=caseTrace()
         casetrace.setPath(self.le.text(),self.le1.text(),self.le2.text())
-        casetrace.updateLogSignal.connect(self.updateLog())
+        casetrace.updateLogSignal.connect(self.updateLog)
         casetrace.start()
 class caseTrace(QThread):
-    updateLogSignal=pyqtSignal(QObject)
+    updateLogSignal=pyqtSignal(str)
     def __init__(self):
         super(caseTrace,self).__init__()
     def setPath(self,casePath,vatPath,caseLable):
@@ -87,31 +87,42 @@ class caseTrace(QThread):
         self.vatPath=vatPath
         self.caseLable=caseLable
     def sendMsg(self,msg):
-        self.updateLogSignal.emit(msg)
-    def case_trace(self): # 导出追踪关系函数
+        self.updateLogSignal.emit("processLog:"+msg)
+    def run(self): # 导出追踪关系函数
         casepath=self.casePath.replace('/','\\')
         vatpath=self.vatPath.replace('/','\\')
+        savePath = os.path.join(os.path.dirname(self.casePath), "traceability.xlsx")
+        savePath = savePath.replace('/', '\\')
+        try:
+            if os.path.exists(savePath):
+                os.unlink(savePath)
+        except Exception as err:
+            self.sendMsg(err)
         if os.path.exists(casepath) and os.path.exists(vatpath):
             self.sendMsg("开始提取追踪关系，请稍后...")
             pass
         else:
             self.sendMsg('Enter path error')
             return
-        tempath=os.path.join(os.path.dirname(casepath), "temp.doc")
-        self.deletePath(tempath)
-        shutil.copy(casepath,tempath)
-        excel=myExcel()
-        wb,wt=excel.AddBook()
-        word=myWord(tempath)
-        word.AcceptRevision()
-        word.ClearFormat()
-        Table=word.getTables()
+        try:
+            tempath=os.path.join(os.path.dirname(casepath), "temp.doc")
+            self.deletePath(tempath)
+            shutil.copy(casepath,tempath)
+            excel=myExcel()
+            wb,wt=excel.AddBook()
+            word=myWord(tempath)
+            word.AcceptRevision()
+            word.ClearFormat()
+            Table=word.getTables()
+        except Exception as err:
+            string = "An exception happend:" + str(err)
+            self.sendMsg(string)
         cloumn = 1
         number_tables = len(Table)
         try:
             for i in range(0, number_tables):
                 # 判断该表格是否为测试用例表格
-                if ("Case" in Table[i].Rows[0].Cells[0].Range.Text or "用例" in Table[i].Rows[0].Cells[0].Range.Text) and caseLable in Table[i].Rows[0].Cells[1].Range.Text:
+                if ("Case" in Table[i].Rows[0].Cells[0].Range.Text or "用例" in Table[i].Rows[0].Cells[0].Range.Text) and self.caseLable in Table[i].Rows[0].Cells[1].Range.Text:
                     # 提取测试用例表格后用例编号的表格
                     sourceNum=0
                     sourceLabel=[]
@@ -125,40 +136,40 @@ class caseTrace(QThread):
                            wt.Cells(cloumn,1).Value=str(text[0]).strip(' ')
                            wt.Cells(cloumn,2).Value="\n".join(text)
                            wt.Cells(cloumn,3).Value=sourceLabel[i]
-                           self.sendMsg(str(wt.Cells(cloumn,3).Value))
+                           #self.sendMsg(str(wt.Cells(cloumn,3).Value))
                            cloumn=cloumn+1
             word.Save()
             word.Close()
             os.unlink(tempath)
             vatwb,vatWorksheets=excel.getSheets(vatpath)
-            traceCloumn=self.getUsedRow(wt)
+            #将VAT中的需求和需求内容都存入到字典中
+            #需求字典
+            reqDict={}
             for vatws in vatWorksheets:
-                vatCloumn=self.getUsedRow(vatws)
-                for m in range(1, traceCloumn+1):
-                    if wt.Cells(m, 3).Value != None:
-                        for n in range(1, vatCloumn+1):
-                            if vatws.Cells(n, 1).Value != None:
-                                if self.labelReplace(wt.Cells(m, 3).Value) == self.labelReplace(vatws.Cells(n, 1).Value):
-                                    self.sendMsg(str(wt.Cells(m, 3).Value))
-                                    wt.Cells(m, 4).Value = vatws.Cells(n, 2).Value
-                                    vatws.Cells(n, 1).Interior.Color = 5287936
-                                    break
-            savePath=os.path.join(os.path.dirname(self.casePath), "traceability.xlsx")
-            savePath=savePath.replace('/','\\')
+                vatRow = self.getUsedRow(vatws)
+                for m in range(1,vatRow):
+                    reqDict[self.labelReplace(vatws.Cells(m,1).Value)]=vatws.Cells(m,2).Value
+            #更新需求追踪表中的VAT需求
+            traceRow = self.getUsedRow(wt) #TIS-KA_LPS-SwITC
+            for i in range(1,traceRow):
+                if (self.labelReplace(wt.Cells(i, 3).Value) in reqDict):
+                    wt.Cells(i, 4).Value = reqDict[self.labelReplace(wt.Cells(i, 3).Value)]
+                    self.sendMsg(self.labelReplace(wt.Cells(i, 3).Value))
             wt.Activate()
             excel.unionFormat(wt,"A1:D800")
-            if os.path.exists(savePath):
-                os.unlink(savePath)
             wb.SaveAs(savePath)
+            self.sendMsg("finshed,文件保存至" + savePath)
             vatwb.SaveAs(vatpath)
+            reqDict.clear()
         except Exception as err:
-            string="An exception happend:" + str(err)
+            string = "An exception happend:" + str(err)
             self.sendMsg(string)
         finally:
             excel.Quit()
-            self.sendMsg("finshed,文件保存至"+savePath)
             word.Quit()
     def labelReplace(self,str1):
+        if (str1 ==None):
+            return
         string=str1.replace("[Source:", "").replace("[[", "[").replace("]]", "]").strip()
         return str(string)
     def getUsedRow(self,ws):
