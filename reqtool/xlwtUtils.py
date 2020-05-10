@@ -17,12 +17,11 @@ class xlwtUtil():
     def Save(self,path):
         self.workbook.save(path)
     def setWidthAndHeight(self):
-        tall_style = xlwt.easyxf('font:height 230')  # 36pt
         for i in range(0,10):
-            self.worksheet.col(i).width = 35 * 256
-        for i in range(0,2000):
+            self.worksheet.col(i).width = 30 * 256
+        for i in range(0,1200):
             self.worksheet.row(i).height_mismatch = True
-            self.worksheet.row(i).height = 20 * 35  # 20为基准数，40意为40磅
+            self.worksheet.row(i).height = 20 * 30  # 20为基准数，40意为40磅
     def GetFont(self):
         style = xlwt.XFStyle()  # 初始化样式
         font = xlwt.Font()  # 为样式创建字体
@@ -30,7 +29,7 @@ class xlwtUtil():
         font.bold = False  # 黑体
         font.underline = False  # 下划线
         font.italic = False  # 斜体字
-        font.height = 20 * 12
+        font.height = 20 * 10
         style.font = font  # 设定样式
 
         alignment = xlwt.Alignment()

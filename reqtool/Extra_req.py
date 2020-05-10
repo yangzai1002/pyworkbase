@@ -18,16 +18,16 @@ class ReqExtraWidget(QWidget):
         self.Reqpath.setText("")
 
         self.ReqLable = QLineEdit()
-        self.ReqLable.setText("ITCS_RBC_L-SDMS-SwRS")
+        self.ReqLable.setText("TIS-KA-SyRD")
         self.LogTextEdit = QTextEdit(self)
 
         #提取需求标签中的特殊标志
         self.Source=QLineEdit()
-        self.SourceLabel=QLabel("Source")
+        self.SourceLabel=QLabel("Source标签")
 
         #提取需求标签中的功能特殊标志
-        self.function=QLineEdit()
-        self.functionLabel=QLabel("Function")
+        #self.function=QLineEdit()
+        #self.functionLabel=QLabel("Function标签")
 
         self.ChooseButton = QPushButton()
         self.ChooseButton.setText("Browse")
@@ -49,20 +49,20 @@ class ReqExtraWidget(QWidget):
         layout.addWidget(self.ReqLable, 1, 1)
 
         #增加源过滤
-        layout.addWidget(self.Source,2,1)
-        layout.addWidget(self.SourceLabel,2,0);
+        #layout.addWidget(self.Source,2,1)
+        #layout.addWidget(self.SourceLabel,2,0);
         #增加功能过滤
-        layout.addWidget(self.function,3,1)
-        layout.addWidget(self.functionLabel,3,0)
+        #layout.addWidget(self.function,3,1)
+        #layout.addWidget(self.functionLabel,3,0)
         #增加确认按钮
         layout.addWidget(self.ConformButton, 4, 1)
 
         layout.addWidget(self.LogName, 5, 0)
-        layout_log = layout.addWidget(self.LogTextEdit, 6, 0, 4, 7)
+        layout_log = layout.addWidget(self.LogTextEdit, 6, 0, 5, 7)
 
         self.setLayout(layout)
 
-        self.setGeometry(350, 350, 450, 350)
+        #self.setGeometry(350, 350, 550, 450)
         self.init_UI()
     def init_UI(self):
         #选择路径
@@ -82,9 +82,7 @@ class ReqExtraWidget(QWidget):
     def extraAct(self):
         reply = QMessageBox.question(self, '消息', "确认提取", QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
         if reply == QMessageBox.Yes:
-            self.extrareq.setPath(self.Reqpath.text(),
-                                 self.ReqLable.text(), self.Source.text()
-                                 , self.function.text())
+            self.extrareq.setPath(self.Reqpath.text(),self.ReqLable.text())
             self.ConformButton.setEnabled(False)
             self.extrareq.finished.connect(self.setConformButtonEnable)
             self.extrareq.start()
@@ -99,11 +97,11 @@ class extraReq(QThread):
     updateLog = pyqtSignal(str)
     def __init__(self):
         super(extraReq,self).__init__()
-    def setPath(self,reqpath,reqkey,reqSource,reqFunction):
+    def setPath(self,reqpath,reqkey):
         self.reqpath=reqpath
         self.reqkey=reqkey
-        self.reqSource=reqSource
-        self.reqFunction=reqFunction
+        #self.reqSource=reqSource
+        #self.reqFunction=reqFunction
         #定义输出目录
         self.outpath = os.path.join(os.path.dirname(self.reqpath), "Requirement_specification.xls").replace('/', '\\')
     def sendlog(self,msg):
@@ -165,11 +163,17 @@ class extraReq(QThread):
         #1 需求标签号
         key = '[' + self.reqkey  # C4D-I-SyRS
         #1 表格行数计数
-        sheet_cloumn = 0
+        sheet_cloumn = 1
         #需求个数计数
         req_num = 0
         try:
             self.sendlog("开始读取" + self.tempTxtPath)
+            myexcel.writeCell(0,0,"Label")
+            myexcel.writeCell(0, 1, "Content")
+            myexcel.writeCell(0, 2, "Priority")
+            myexcel.writeCell(0, 3, "Contribution")
+            myexcel.writeCell(0, 4, "Implement")
+            myexcel.writeCell(0,5, "Category")
             while True:
                 tempLine = file.readline()
                 if tempLine == "":
@@ -177,57 +181,63 @@ class extraReq(QThread):
                 if key in tempLine and self.hasChar(tempLine):
                     # 查找的行数递增变量
                     base_num = 1  # TIS-KA_LPS-SwAD,[Reused]
-                    # 增加find sourec和find function标志
-                    findSource = False
-                    findfunction = False
-                    isfindSoure = True
-                    isfindFunction = True
-                    if self.reqSource == "":
-                        isfindSoure = False
-                    if self.reqFunction == "":
-                        isfindFunction = False
-                    # 找到标签行
                     reqLabel = str(tempLine)
                     reqLabel = self.defSpace(reqLabel).strip('\n').strip(' ')
                     #设置内容为空，核心查找逻辑处理
                     reqContent = tempLine
+                    #优先级
+                    priority=None
+                    #策略
+                    category=None
+                    #贡献
+                    contribute=None
+                    #执行
+                    implement=None
                     while (base_num <= 200):
                         # 查找[End]标志
                         tempLine=file.readline()
+                        reqContent = reqContent + tempLine
+                        #查找到优先级别
+                        if self.ContainStr(tempLine,"Priority") and self.ContainStr(tempLine,"="):
+                            priority=tempLine[tempLine.index("=")+1:str.__len__(tempLine)].strip()
+                        if self.ContainStr(tempLine, "Contribution") and self.ContainStr(tempLine, "="):
+                            contribute = tempLine[tempLine.index("=") + 1:str.__len__(tempLine)].strip()
+                        if self.ContainStr(tempLine, "Implement") and self.ContainStr(tempLine, "="):
+                            implement = tempLine[tempLine.index("=") + 1:str.__len__(tempLine)].strip()
+                        if self.ContainStr(tempLine, "Category") and self.ContainStr(tempLine, "="):
+                            category= tempLine[tempLine.index("=") + 1:str.__len__(tempLine)].strip()
+                        #查找到结尾
                         if tempLine == "":
                             break
-                        reqContent=reqContent+tempLine
                         if '[End]' in tempLine:
-                            findEnd = True
                             break
-                        if isfindSoure == True and self.reqSource in tempLine:
-                            findSource = True
-                        if isfindFunction == True and self.reqFunction in tempLine:
-                            findfunction = True
                         if key in tempLine and self.hasChar(tempLine):
-                            findEnd = False
                             break
                         # 需求数增加1
                         base_num = base_num + 1
                     # 确定需求内容
                     reqContent=reqContent.strip(' ')
-                    # 是否提取需求标签和内容
-                    takeSoureLabel = False
-                    takeFunctionLabel = False
-                    if ((isfindSoure == True and findSource == True) or isfindSoure == False):
-                        takeSoureLabel = True
-                    if ((isfindFunction == True and findfunction == True) or isfindFunction == False):
-                        takeFunctionLabel = True
-                    if (takeSoureLabel == True and isfindSoure == True):
-                        myexcel.writeCell(sheet_cloumn,2,self.reqSource)
-                    if (takeFunctionLabel == True and isfindFunction == True):
-                        myexcel.writeCell(sheet_cloumn, 2, ''.join(self.reqFunction))
                     myexcel.writeCell(sheet_cloumn,0,reqLabel)
-                    myexcel.writeCell(sheet_cloumn, 1, reqContent)
+                    myexcel.writeCell(sheet_cloumn,1,reqContent)
+                    if priority !=None:
+                        myexcel.writeCell(sheet_cloumn,2,priority)
+                    else:
+                        myexcel.writeCell(sheet_cloumn, 2, "")
+                    if category != None:
+                        myexcel.writeCell(sheet_cloumn,3,category)
+                    else:
+                        myexcel.writeCell(sheet_cloumn, 3, "")
+                    if contribute!=None:
+                        myexcel.writeCell(sheet_cloumn,4,contribute)
+                    else:
+                        myexcel.writeCell(sheet_cloumn, 4, "")
+                    if implement !=None:
+                        myexcel.writeCell(sheet_cloumn,5,implement)
+                    else:
+                        myexcel.writeCell(sheet_cloumn, 5, "")
                     self.sendlog("提取需求"+reqLabel)
                     req_num = req_num + 1
                     sheet_cloumn = sheet_cloumn + 1
-
             #excel.unionFormat(wt, "A1:C1000")
             myexcel.setWidthAndHeight()
             time.sleep(3)
@@ -254,7 +264,12 @@ class extraReq(QThread):
                 return False
             else:
                 return True
-
+    def ContainStr(self,toBeContain,contain):
+        if contain in toBeContain:
+            return True
+        if contain.lower() in toBeContain.lower():
+            return True
+        return False
     def defSpace(self, str):
         for i in str:
             if i == ' ':
@@ -287,6 +302,7 @@ class extraReq(QThread):
         except Exception as err:
             self.sendlog("An exception happend:" + str(err))
             file.close()
+            return
         #获取word中的段落对象
         try:
             Paragraph = self.word.getPara()
