@@ -1,12 +1,13 @@
 ﻿from PyQt5.QtWidgets import *
-import sys, os, openpyxl, shutil, time
-from PyQt5.QtWidgets import *
+import sys, os, shutil
+from time import ctime
+import time
 from PyQt5.QtGui import *
 from PyQt5 import QtCore, QtGui
-from PyQt5.QtCore import QDir,pyqtSignal,pyqtSlot,QObject,QThread
+from PyQt5.QtCore import pyqtSignal,pyqtSlot,QObject,QThread
 from WordApplication import *
 from ExcelApplication import *
-import xlwt
+from xlwtUtils import *
 class ReqExtraWidget(QWidget):
 
     def __init__(self, parent=None):
@@ -64,13 +65,13 @@ class ReqExtraWidget(QWidget):
         self.setGeometry(350, 350, 450, 350)
         self.init_UI()
     def init_UI(self):
-        self.outpath = "E:\\requirement.xlsx"
-
+        #选择路径
         self.ChooseButton.clicked.connect(self.ChooseButton_click)
         #声明一个提取需求类
         self.extrareq = extraReq()
+        #链接信号和槽
         self.extrareq.updateLog.connect(self.addlog)
-
+        #链接主程序和信号
         self.ConformButton.clicked.connect(self.extraAct)
     def ChooseButton_click(self):
         # absolute_path is a QString object
@@ -84,12 +85,16 @@ class ReqExtraWidget(QWidget):
             self.extrareq.setPath(self.Reqpath.text(),
                                  self.ReqLable.text(), self.Source.text()
                                  , self.function.text())
+            self.ConformButton.setEnabled(False)
+            self.extrareq.finished.connect(self.setConformButtonEnable)
             self.extrareq.start()
         else:
             pass
-
+    #槽函数，发射信息
     def addlog(self,msg):
         self.LogTextEdit.append(msg)
+    def setConformButtonEnable(self):
+        self.ConformButton.setEnabled(True)
 class extraReq(QThread):
     updateLog = pyqtSignal(str)
     def __init__(self):
@@ -106,6 +111,7 @@ class extraReq(QThread):
     def run(self):
         # 输入参数判断
         #1 先判断输入的需求路径
+        self.start=time.clock()
         if(os.path.exists(self.reqpath)):
             pass
         else:
@@ -117,29 +123,49 @@ class extraReq(QThread):
             return
         #3 再判断输出路径是否合理
         if(os.path.exists(self.outpath)):
-            os.unlink(self.outpath)
+            try:
+                os.unlink(self.outpath)
+            except Exception as err:
+                errorStr = "An exception happend:" + str(err)
+                self.sendlog(errorStr)
+                return
         #根据输入需求目录生成临时处理文件
         #1 根据需求目录得到临时目录的路径
         self.newReqPath=os.path.join(os.path.dirname(self.reqpath), "temp.doc").replace('/', '\\')
-
         #2 copy文件，调用函数
-        self.copyFile(self.reqpath,self.newReqPath)
+        try:
+            if(os.path.exists(self.newReqPath)):
+                os.unlink(self.newReqPath)
+            self.copyFile(self.reqpath,self.newReqPath)
+        except Exception as err:
+            errorStr = "An exception happend:" + str(err)
+            self.sendlog(errorStr)
+            return
         self.sendlog("复制新文件:" + self.newReqPath)
         #将word文档提取到临时txt文件中
         self.tempTxtPath = os.path.join(os.path.dirname(self.newReqPath), "req.txt")
         self.wordToTxt(self.newReqPath,self.tempTxtPath)
         self.sendlog("提取txt:" + self.tempTxtPath)
         #将txt文件中的字符读入到列表中
-        file = open(self.tempTxtPath, 'r+', encoding='utf-8')
-        #创建一个excel表格
+        try:
+            file = open(self.tempTxtPath, 'r+', encoding='utf-8')
+        except Exception as err:
+            errorStr = "An exception happend:" + str(err)
+            self.sendlog(errorStr)
         os.chdir(os.path.dirname(self.reqpath))
-        book = xlwt.Workbook(encoding="utf-8", style_compression=0)
-        wt=book.add_sheet('VAT', cell_overwrite_ok=True)
+        #创建一个excel表格
+        try:
+            myexcel=xlwtUtil()
+            myexcel.CreateSheet()
+        except Exception as err:
+            errorStr = "An exception happend:" + str(err)
+            self.sendlog(errorStr)
+            return
         #初始化查找参数
         #1 需求标签号
         key = '[' + self.reqkey  # C4D-I-SyRS
         #1 表格行数计数
-        sheet_cloumn = 1
+        sheet_cloumn = 0
         #需求个数计数
         req_num = 0
         try:
@@ -192,32 +218,34 @@ class extraReq(QThread):
                         takeSoureLabel = True
                     if ((isfindFunction == True and findfunction == True) or isfindFunction == False):
                         takeFunctionLabel = True
-                    # print("takeSoureLabel:"+str(takeSoureLabel))
-                    # print("takeFunctionLabel:"+str(takeFunctionLabel))
                     if (takeSoureLabel == True and isfindSoure == True):
-                        wt.Cells(sheet_cloumn, 3).Value = self.reqSource
+                        myexcel.writeCell(sheet_cloumn,2,self.reqSource)
                     if (takeFunctionLabel == True and isfindFunction == True):
-                        wt.Cells(sheet_cloumn, 3).Value = ''.join(self.reqFunction)
-                    wt.Cells(sheet_cloumn, 1).Value = reqLabel
-                    wt.Cells(sheet_cloumn, 2).Value = reqContent
-                    self.sendlog("提取需求"+str(wt.Cells(sheet_cloumn, 1).Value))
+                        myexcel.writeCell(sheet_cloumn, 2, ''.join(self.reqFunction))
+                    myexcel.writeCell(sheet_cloumn,0,reqLabel)
+                    myexcel.writeCell(sheet_cloumn, 1, reqContent)
+                    self.sendlog("提取需求"+reqLabel)
                     req_num = req_num + 1
                     sheet_cloumn = sheet_cloumn + 1
 
             #excel.unionFormat(wt, "A1:C1000")
-            time.sleep(5)
+            myexcel.setWidthAndHeight()
+            time.sleep(3)
             #保存excel输出文档
-            wt.SaveAs(self.outpath)
+            myexcel.Save(self.outpath)
             self.sendlog("Congratulation,Complete!")
             self.sendlog("文件保存至:" + self.outpath)
-            errorStr = "The number of requirement is " + str(req_num)
-            self.sendlog(errorStr)
+            result = "The number of requirement is " + str(req_num)
+            self.sendlog(result)
+            self.end = time.clock()
+            self.sendlog("run time:" + str(self.end-self.start))
         except Exception as err:
             errorStr = "An exception happend:" + str(err)
             self.sendlog(errorStr)
             return
         finally:
             file.close()
+            os.unlink(self.newReqPath)
             # 删除临时txt文件
             os.unlink(self.tempTxtPath)
     def hasChar(self, str):
@@ -242,30 +270,31 @@ class extraReq(QThread):
             return
     def wordToTxt(self,wordPath,txtPath):
         #创建一个word对象
-        word = myWord(wordPath)
-        #接收word文件中的修订记录
-        word.AcceptRevision()
-        #清楚word中的格式
-        word.ClearFormat()
-        #删除word中的表格
-        word.delTable()
+        try:
+            self.word = myWord(wordPath)
+            # 接收word文件中的修订记录
+            self.word.AcceptRevision()
+            # 清楚word中的格式
+            self.word.ClearFormat()
+            # 删除word中的表格
+            self.word.delTable()
+        except Exception as err:
+            self.sendlog("An exception happend:" + str(err))
+            self.word.Save()
          # ITCS_RBC_L-SDMS-SwRS
         try:
             file = open(txtPath, 'w+', encoding='utf-8')
         except Exception as err:
             self.sendlog("An exception happend:" + str(err))
-            return
+            file.close()
         #获取word中的段落对象
-        Paragraph = word.getPara()
-        #将word中的段落写到txt文件中去
-        for para in Paragraph:
-            file.write(para.Range.Text)  # [ITCS_RBC_L-SyRS
-        #关闭word，释放word资源
         try:
-            word.Save()
-            word.Close()
-            #删除原word文档
-            os.unlink(wordPath)
+            Paragraph = self.word.getPara()
+            #将word中的段落写到txt文件中去
+            for para in Paragraph:
+                file.write(para.Range.Text)  # [ITCS_RBC_L-SyRS
         except Exception as err:
             self.sendlog("An exception happend:" + str(err))
-            return
+        finally:
+            self.word.Save()
+            self.word.Close()

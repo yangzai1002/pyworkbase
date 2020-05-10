@@ -4,10 +4,7 @@ class myWord():
         self.ms_word=Dispatch('word.Application')
         self.ms_wordVisible = 0
         self.ms_word.DisplayAlerts = 0
-        try:
-            self.doc=self.ms_word.Documents.Open(path)
-        except Exception as err:
-            string="An exception happend:" + str(err)
+        self.doc=self.ms_word.Documents.Open(path)
     def AcceptRevision(self):
         self.doc.AcceptAllRevisions()
     def ClearFormat(self):

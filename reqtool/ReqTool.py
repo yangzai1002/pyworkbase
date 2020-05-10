@@ -1,7 +1,6 @@
 from Extra_req import *
 from Com_req import *
 from Trace import *
-from log import *
 class TabWidget(QTabWidget):
     def __init__(self, parent=None):
         super(TabWidget, self).__init__(parent)
